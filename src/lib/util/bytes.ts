@@ -2,9 +2,11 @@
 
 export class ByteReader {
   readonly view: DataView;
+  readonly bytes: Uint8Array;
   offset = 0;
 
-  constructor(readonly bytes: Uint8Array) {
+  constructor(bytes: Uint8Array) {
+    this.bytes = bytes;
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   }
 

@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "cf-dev": "npm run build && wrangler dev",
-    "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts"
+    "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts && node --experimental-strip-types src/lib/zip/streamzip.test.mts"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -21,6 +21,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",

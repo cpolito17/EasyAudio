@@ -14,7 +14,7 @@
  *     while every stored sample sits below full scale.
  */
 
-import type { LoudnessReport } from '../../types';
+import type { LoudnessReport } from '../../types.ts';
 
 /** A single direct-form-II transposed biquad section. */
 interface Biquad {
