@@ -1,0 +1,34 @@
+{
+  "name": "easyaudio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b --noCheck && vite build",
+    "typecheck": "tsc -b",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-dev": "npm run build && wrangler dev",
+    "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "@phosphor-icons/react": "^2.1.7",
+    "motion": "^11.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "mpg123-decoder": "^1.0.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "wrangler": "^3.99.0"
+  }
+}
