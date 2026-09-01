@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "tsc -b --noCheck && vite build",
     "typecheck": "tsc -b",
-    "preview": "vite preview",
+    "preview": "vite preview --port 4173 --strictPort",
     "deploy": "npm run build && wrangler deploy",
     "cf-dev": "npm run build && wrangler dev",
-    "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts && node --experimental-strip-types src/lib/zip/streamzip.test.mts"
+    "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts && node --experimental-strip-types src/lib/zip/streamzip.test.mts",
+    "e2e": "node --experimental-strip-types e2e/run.mts"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
