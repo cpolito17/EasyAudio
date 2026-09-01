@@ -1,0 +1,329 @@
+@import 'tailwindcss';
+
+/*
+ * EasyAudio design tokens.
+ *
+ * One accent (azure), one neutral family (cool blue-grey), and one radius
+ * system: panels 16px, inner surfaces 10px, controls 8px, primary actions
+ * pill. Every colour is defined here in the light palette first and only
+ * redefined for dark, so nothing can end up with a value in one theme and
+ * none in the other.
+ *
+ * Type is the platform's own UI face. It ships optical sizing, real tracking
+ * tables and legibility tuning that no webfont download would improve on for
+ * an interface this dense, and it costs nothing to load.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #eef4fb;
+  --bg-grad-a: #e4eefa;
+  --bg-grad-b: #f6f9fd;
+
+  --surface: #ffffff;
+  --surface-2: #f5f9fd;
+  --surface-3: #eaf1f9;
+  --surface-sunken: #e7eff8;
+
+  --border: rgb(14 44 82 / 0.10);
+  --border-strong: rgb(14 44 82 / 0.18);
+  --hairline: rgb(14 44 82 / 0.06);
+
+  --text: #0d2138;
+  --text-2: #46617f;
+  --text-3: #7791ad;
+  --text-inverse: #ffffff;
+
+  --accent: #0d7df2;
+  --accent-hover: #0a68cc;
+  --accent-press: #0857ab;
+  --accent-soft: rgb(13 125 242 / 0.10);
+  --accent-softer: rgb(13 125 242 / 0.05);
+  --accent-ring: rgb(13 125 242 / 0.35);
+
+  --success: #0e9f6e;
+  --success-soft: rgb(14 159 110 / 0.12);
+  --warning: #b26a00;
+  --warning-soft: rgb(178 106 0 / 0.12);
+  --danger: #d92d3c;
+  --danger-soft: rgb(217 45 60 / 0.11);
+
+  --shadow-sm: 0 1px 2px rgb(14 44 82 / 0.06), 0 1px 1px rgb(14 44 82 / 0.04);
+  --shadow-md: 0 4px 16px rgb(14 44 82 / 0.08), 0 1px 3px rgb(14 44 82 / 0.05);
+  --shadow-lg: 0 18px 48px rgb(14 44 82 / 0.13), 0 2px 8px rgb(14 44 82 / 0.06);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.75);
+
+  --radius-panel: 16px;
+  --radius-inner: 10px;
+  --radius-control: 8px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
+    'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono',
+    Menlo, Consolas, monospace;
+
+  /* Apple's critically damped default: quick, no overshoot. */
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root:not([data-theme='light']) {
+  @media (prefers-color-scheme: dark) {
+    color-scheme: dark;
+
+    --bg: #080f1a;
+    --bg-grad-a: #0b1626;
+    --bg-grad-b: #060b13;
+
+    --surface: #101c2e;
+    --surface-2: #14223a;
+    --surface-3: #1a2b46;
+    --surface-sunken: #0b1524;
+
+    --border: rgb(148 187 233 / 0.14);
+    --border-strong: rgb(148 187 233 / 0.26);
+    --hairline: rgb(148 187 233 / 0.08);
+
+    --text: #e6effb;
+    --text-2: #a2b8d2;
+    --text-3: #6d87a5;
+
+    --accent: #3d9bff;
+    --accent-hover: #5cabff;
+    --accent-press: #7bbaff;
+    --accent-soft: rgb(61 155 255 / 0.16);
+    --accent-softer: rgb(61 155 255 / 0.08);
+    --accent-ring: rgb(61 155 255 / 0.45);
+
+    --success: #2bc48a;
+    --success-soft: rgb(43 196 138 / 0.16);
+    --warning: #e0954b;
+    --warning-soft: rgb(224 149 75 / 0.16);
+    --danger: #ff6b73;
+    --danger-soft: rgb(255 107 115 / 0.16);
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 18px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 20px 52px rgb(0 0 0 / 0.55);
+    --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #080f1a;
+  --bg-grad-a: #0b1626;
+  --bg-grad-b: #060b13;
+
+  --surface: #101c2e;
+  --surface-2: #14223a;
+  --surface-3: #1a2b46;
+  --surface-sunken: #0b1524;
+
+  --border: rgb(148 187 233 / 0.14);
+  --border-strong: rgb(148 187 233 / 0.26);
+  --hairline: rgb(148 187 233 / 0.08);
+
+  --text: #e6effb;
+  --text-2: #a2b8d2;
+  --text-3: #6d87a5;
+
+  --accent: #3d9bff;
+  --accent-hover: #5cabff;
+  --accent-press: #7bbaff;
+  --accent-soft: rgb(61 155 255 / 0.16);
+  --accent-softer: rgb(61 155 255 / 0.08);
+  --accent-ring: rgb(61 155 255 / 0.45);
+
+  --success: #2bc48a;
+  --success-soft: rgb(43 196 138 / 0.16);
+  --warning: #e0954b;
+  --warning-soft: rgb(224 149 75 / 0.16);
+  --danger: #ff6b73;
+  --danger-soft: rgb(255 107 115 / 0.16);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 18px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 20px 52px rgb(0 0 0 / 0.55);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-hairline: var(--hairline);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-softer: var(--accent-softer);
+  --color-ok: var(--success);
+  --color-ok-soft: var(--success-soft);
+  --color-warn: var(--warning);
+  --color-warn-soft: var(--warning-soft);
+  --color-bad: var(--danger);
+  --color-bad-soft: var(--danger-soft);
+
+  --radius-panel: var(--radius-panel);
+  --radius-inner: var(--radius-inner);
+  --radius-control: var(--radius-control);
+
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+/*
+ * A single very soft light source behind the app. It is fixed and
+ * pointer-events-none so it never repaints while content scrolls.
+ */
+.ambient-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(90rem 50rem at 12% -10%, var(--bg-grad-a), transparent 60%),
+    radial-gradient(70rem 40rem at 100% 0%, var(--accent-softer), transparent 55%),
+    linear-gradient(180deg, var(--bg-grad-b), var(--bg));
+}
+
+/* Numbers are compared column to column, so they must not shift width. */
+.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.01em;
+}
+
+/* Display type: tighten tracking as size grows, per the type rules. */
+.display-lg {
+  font-size: clamp(1.9rem, 3.4vw, 2.9rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+
+.display-sm {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+.label-tiny {
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  font-weight: 550;
+  color: var(--text-3);
+}
+
+/*
+ * Nested enclosure. An outer tray holds an inner surface with a concentric
+ * radius, which reads as a machined object rather than a flat rectangle.
+ */
+.tray {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: 5px;
+  box-shadow: var(--shadow-sm);
+}
+
+.tray-core {
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+  box-shadow: var(--shadow-inset);
+  overflow: hidden;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Translucent chrome, applied only to fixed elements. */
+.chrome {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--hairline);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .chrome {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Focus is always visible and always the accent, never a browser default. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

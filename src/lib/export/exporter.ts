@@ -19,7 +19,7 @@ import type {
   NormalizationSettings,
   Track,
   CoverImage,
-} from '../../types';
+} from '../../types.ts';
 import { buildId3 } from '../tags/id3-write.ts';
 import { parseMp3, applyLosslessGain, dbToSteps } from '../mp3/frames.ts';
 import { encodeMp3 } from '../mp3/encode.ts';
@@ -31,7 +31,7 @@ import {
   limitTruePeak,
   measureTruePeakDb,
   trim,
-} from '../audio/process';
+} from '../audio/process.ts';
 import { readAudio } from '../storage/opfs.ts';
 import { ZipWriter, createFileSink, createBlobSink } from '../zip/streamzip.ts';
 import { renderPath, deduplicatePaths } from '../filename/template.ts';
@@ -205,9 +205,15 @@ export async function runExport(
 
   // Prefer streaming straight to a file the user picks; fall back to building
   // a Blob when the browser has no File System Access API.
-  const fileSink = await createFileSink(archiveName);
-  const blobSink = fileSink ? null : createBlobSink();
-  const sink = fileSink?.sink ?? blobSink!.sink;
+  const destination = await createFileSink(archiveName);
+
+  if (destination.kind === 'cancelled') {
+    onProgress({ phase: 'cancelled', completed: 0, total, label: '' });
+    return;
+  }
+
+  const blobSink = destination.kind === 'unavailable' ? createBlobSink() : null;
+  const sink = destination.kind === 'file' ? destination.sink : blobSink!.sink;
 
   const zip = new ZipWriter(sink);
 
@@ -318,11 +324,15 @@ export async function runExport(
     await zip.add(
       `${folder}loudness-report.txt`,
       encoder.encode(
-        buildLoudnessReport(tracks, {
-          targetLufs: request.normalization.targetLufs,
-          mode: request.normalization.mode,
-          truePeakCeiling: request.normalization.truePeakCeiling,
-        }),
+        buildLoudnessReport(
+          tracks,
+          {
+            targetLufs: request.normalization.targetLufs,
+            mode: request.normalization.mode,
+            truePeakCeiling: request.normalization.truePeakCeiling,
+          },
+          request.plan.tracks,
+        ),
       ),
     );
 

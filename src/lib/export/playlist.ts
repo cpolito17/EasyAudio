@@ -6,7 +6,7 @@
  * which is what tools that burn discs or split a set expect.
  */
 
-import type { Track } from '../../types.ts';
+import type { LoudnessReport, Track } from '../../types.ts';
 
 function escapeForCue(value: string): string {
   // Cue sheets quote strings and have no escape sequence, so an embedded quote
@@ -101,6 +101,7 @@ export function buildCueSheet(
 export function buildLoudnessReport(
   tracks: Track[],
   settings: { targetLufs: number; mode: string; truePeakCeiling: number },
+  plan: Map<string, { gainDb: number; projected: LoudnessReport; lossless: boolean }>,
 ): string {
   const lines: string[] = [
     'EasyAudio loudness report',
@@ -122,25 +123,33 @@ export function buildLoudnessReport(
       column('LUFS out', 10) +
       column('Peak out', 10) +
       column('LRA', 7) +
-      'DR',
+      column('DR', 6) +
+      'Method',
   );
-  lines.push('-'.repeat(94));
+  lines.push('-'.repeat(100));
 
   for (const track of tracks) {
+    const entry = plan.get(track.id);
     const name = `${track.tags.track || '?'}. ${track.tags.title || track.fileName}`;
     lines.push(
       column(name.slice(0, 38), 40) +
         column(number(track.loudness?.integrated), 10) +
         column(
-          track.appliedGainDb === undefined
+          entry === undefined
             ? '-'
-            : `${track.appliedGainDb >= 0 ? '+' : ''}${track.appliedGainDb.toFixed(1)}`,
+            : `${entry.gainDb >= 0 ? '+' : ''}${entry.gainDb.toFixed(1)}`,
           9,
         ) +
-        column(number(track.projected?.integrated), 10) +
-        column(number(track.projected?.truePeak), 10) +
+        column(number(entry?.projected.integrated), 10) +
+        column(number(entry?.projected.truePeak), 10) +
         column(number(track.loudness?.range), 7) +
-        number(track.loudness?.dynamicRange),
+        column(
+          track.loudness && track.loudness.dynamicRange > 0
+            ? String(Math.round(track.loudness.dynamicRange))
+            : '-',
+          6,
+        ) +
+        (entry === undefined ? '-' : entry.lossless ? 'lossless' : 're-encoded'),
     );
   }
 
@@ -149,6 +158,10 @@ export function buildLoudnessReport(
     'LUFS is loudness to ITU-R BS.1770-4. Peak is true peak in dBTP, measured',
     'with 4x oversampling. LRA is loudness range in LU. DR is a crest-based',
     'dynamic range figure: lower means more heavily compressed.',
+    '',
+    'A track marked lossless had its level changed by rewriting the per-granule',
+    'global_gain field in the MP3 bitstream. No decoding or re-encoding was',
+    'involved, so its audio is otherwise bit-identical to the source.',
   );
 
   return `${lines.join('\n')}\n`;

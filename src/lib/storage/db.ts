@@ -11,7 +11,7 @@ import type {
   ExportSettings,
   NormalizationSettings,
   Track,
-} from '../../types';
+} from '../../types.ts';
 
 const DATABASE_NAME = 'easyaudio';
 const DATABASE_VERSION = 1;

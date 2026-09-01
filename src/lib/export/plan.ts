@@ -9,7 +9,7 @@
 import type { LoudnessReport, NormalizationSettings, Track } from '../../types.ts';
 import { albumIntegratedLoudness } from '../audio/loudness.ts';
 import { planNormalization } from '../audio/process.ts';
-import { dbToSteps, GAIN_STEP_DB } from '../mp3/frames.ts';
+import { GAIN_STEP_DB } from '../mp3/frames.ts';
 
 export interface LoudnessTargetPreset {
   id: NormalizationSettings['targetId'];
@@ -75,8 +75,13 @@ export interface TrackPlan {
   gainDb: number;
   /** True when a limiter is needed to hold the peak ceiling. */
   willLimit: boolean;
-  /** How far short of the target the track will land, in dB. */
+  /** How far below target the track lands for want of peak headroom, in dB. */
   shortfallDb: number;
+  /**
+   * Absolute deviation caused by the lossless path moving in 1.5 dB steps.
+   * Zero when the track is re-encoded, since that path can apply any gain.
+   */
+  quantisationDb: number;
   /** Predicted measurements after processing. */
   projected: LoudnessReport;
   /** True when the change can be made without re-encoding. */
@@ -89,8 +94,31 @@ export interface NormalizationPlan {
   tracks: Map<string, TrackPlan>;
   /** Measured loudness of the album as a whole, before any change. */
   albumLoudness: number;
-  /** Single gain applied to every track in album mode. */
+  /** The gain album mode asks for, before any quantisation. */
   albumGainDb: number;
+  /**
+   * The gain that will actually be applied on average, after the lossless path
+   * rounds to whole steps. This is what the album really lands at, so it is
+   * what the interface must report.
+   */
+  albumEffectiveGainDb: number;
+}
+
+/**
+ * Convert a gain to whole global_gain steps.
+ *
+ * Rounding to the nearest step halves the worst-case error compared with
+ * truncating (0.75 dB instead of 1.5 dB). Rounding up can only be unsafe if it
+ * pushes the true peak past the ceiling, so that case steps back down.
+ */
+function quantiseSteps(
+  gainDb: number,
+  truePeakDb: number,
+  ceilingDb: number,
+): number {
+  let steps = Math.round(gainDb / GAIN_STEP_DB);
+  while (steps > 0 && truePeakDb + steps * GAIN_STEP_DB > ceilingDb) steps -= 1;
+  return steps;
 }
 
 /** Does this track need re-encoding regardless of the gain? */
@@ -166,12 +194,18 @@ export function buildPlan(
         gainDb: 0,
         willLimit: false,
         shortfallDb: 0,
+        quantisationDb: 0,
         projected: track.loudness,
         lossless: reason === undefined,
         reencodeReason: reason,
       });
     }
-    return { tracks: plans, albumLoudness, albumGainDb: 0 };
+    return {
+      tracks: plans,
+      albumLoudness,
+      albumGainDb: 0,
+      albumEffectiveGainDb: 0,
+    };
   }
 
   // Album mode: one gain for the whole release, so the quiet track stays quieter
@@ -225,34 +259,40 @@ export function buildPlan(
     if (!reason && willLimit) {
       reason = 'The true-peak limiter has to work on the samples themselves.';
     }
-    if (!reason && gainDb !== 0) {
-      const steps = dbToSteps(gainDb);
-      const residual = Math.abs(gainDb - steps * GAIN_STEP_DB);
-      // Accept landing within 1.5 dB of target rather than throwing away the
-      // lossless path for a fraction of a decibel.
-      if (steps === 0 && Math.abs(gainDb) >= GAIN_STEP_DB) {
-        reason = 'Requested gain cannot be expressed in whole steps.';
-      } else if (residual > GAIN_STEP_DB) {
-        reason = 'Requested gain cannot be expressed in whole steps.';
-      }
-    }
-
     const lossless = reason === undefined;
 
-    // In the lossless path the applied gain is quantised, so report the value
-    // that will really be applied rather than the one that was asked for.
-    const effectiveGain = lossless ? dbToSteps(gainDb) * GAIN_STEP_DB : gainDb;
+    // On the lossless path the gain is quantised to whole steps, so report the
+    // value that will really be applied rather than the one asked for. Trading
+    // up to 0.75 dB of accuracy for zero generation loss is worth it, but the
+    // interface has to be honest that the trade was made.
+    const effectiveGain = lossless
+      ? quantiseSteps(gainDb, loudness.truePeak, settings.truePeakCeiling) *
+        GAIN_STEP_DB
+      : gainDb;
 
     plans.set(track.id, {
       trackId: track.id,
       gainDb: effectiveGain,
       willLimit,
-      shortfallDb: shortfallDb + Math.abs(gainDb - effectiveGain),
+      shortfallDb,
+      quantisationDb: Math.abs(gainDb - effectiveGain),
       projected: project(loudness, effectiveGain, willLimit, settings.truePeakCeiling),
       lossless,
       reencodeReason: reason,
     });
   }
 
-  return { tracks: plans, albumLoudness, albumGainDb };
+  // What the album actually lands at, weighted the same way it was measured.
+  let weighted = 0;
+  let totalDuration = 0;
+  for (const track of analysed) {
+    const entry = plans.get(track.id);
+    if (!entry) continue;
+    weighted += entry.gainDb * track.audio.durationSeconds;
+    totalDuration += track.audio.durationSeconds;
+  }
+  const albumEffectiveGainDb =
+    totalDuration > 0 ? weighted / totalDuration : albumGainDb;
+
+  return { tracks: plans, albumLoudness, albumGainDb, albumEffectiveGainDb };
 }

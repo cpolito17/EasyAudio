@@ -233,6 +233,18 @@ export class ZipWriter {
 }
 
 /**
+ * Outcome of asking for a save location.
+ *
+ * The three cases are genuinely different and the caller must treat them
+ * differently: a sink to stream into, an explicit cancellation that should stop
+ * the export, and "not available", which falls back to building a Blob.
+ */
+export type FileSinkResult =
+  | { kind: 'file'; sink: ZipSink }
+  | { kind: 'cancelled' }
+  | { kind: 'unavailable' };
+
+/**
  * A sink backed by the File System Access API.
  *
  * This is the path that makes large exports safe: bytes go straight to the
@@ -240,14 +252,14 @@ export class ZipWriter {
  */
 export async function createFileSink(
   suggestedName: string,
-): Promise<{ sink: ZipSink; kind: 'file' } | null> {
+): Promise<FileSinkResult> {
   const picker = (
     window as unknown as {
       showSaveFilePicker?: (options: unknown) => Promise<FileSystemFileHandle>;
     }
   ).showSaveFilePicker;
 
-  if (typeof picker !== 'function') return null;
+  if (typeof picker !== 'function') return { kind: 'unavailable' };
 
   try {
     const handle = await picker({
@@ -268,9 +280,15 @@ export async function createFileSink(
       },
     };
   } catch (error) {
-    // The user dismissing the picker is a normal outcome, not a failure.
-    if (error instanceof DOMException && error.name === 'AbortError') return null;
-    throw error;
+    // Dismissing the dialog is a decision, and must stop the export rather than
+    // quietly downloading through the fallback instead.
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return { kind: 'cancelled' };
+    }
+    // Anything else (no user activation, a sandboxed frame, a permissions
+    // policy) is a capability problem, not a decision: fall back rather than
+    // failing the export outright.
+    return { kind: 'unavailable' };
   }
 }
 

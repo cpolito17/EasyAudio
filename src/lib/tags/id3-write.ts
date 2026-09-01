@@ -13,7 +13,7 @@ import {
   encodeUtf16WithBom,
   isLatin1Safe,
   writeSyncSafe,
-} from '../util/bytes';
+} from '../util/bytes.ts';
 import type { TrackTags } from '../../types.ts';
 
 export interface Id3WriteOptions {
