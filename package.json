@@ -11,7 +11,8 @@
     "deploy": "npm run build && wrangler deploy",
     "cf-dev": "npm run build && wrangler dev",
     "test": "node --experimental-strip-types src/lib/audio/loudness.test.mts && node --experimental-strip-types src/lib/mp3/frames.test.mts && node --experimental-strip-types src/lib/zip/streamzip.test.mts",
-    "e2e": "node --experimental-strip-types e2e/run.mts"
+    "e2e": "node --experimental-strip-types e2e/run.mts",
+    "diagnose:art": "node --experimental-strip-types e2e/art-diagnostic.mts"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
