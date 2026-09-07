@@ -104,6 +104,18 @@ export default function App() {
 
       {/* Top chrome. Fixed, translucent, with content scrolling beneath it. */}
       <header className="chrome sticky top-0 z-30 flex shrink-0 items-center gap-3 px-4 py-2.5">
+        <a
+          className="portfolio-return"
+          href="https://charliepolito.com/"
+          aria-label="Return to Charlie Polito's portfolio"
+        >
+          <img
+            src={`${import.meta.env.BASE_URL}charlie-polito.svg`}
+            alt=""
+            aria-hidden="true"
+          />
+          <span>CharliePolito.com</span>
+        </a>
         <div className="flex items-center gap-2.5">
           <span className="grid size-7 place-items-center rounded-[7px] bg-[var(--accent)] text-white shadow-[var(--shadow-sm)]">
             <WaveformIcon size={15} weight="bold" />

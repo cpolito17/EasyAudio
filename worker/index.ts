@@ -1,35 +1,56 @@
 /**
- * EasyAudio Worker.
- *
- * The Worker deliberately does no audio work. Every byte of audio stays in the
- * browser: decoding, loudness analysis, gain application, tag writing and ZIP
- * assembly all run in the user's tab. Cloudflare isolates cap out at 128 MB of
- * memory and request bodies well below album size, so shipping audio here would
- * be slower, more expensive and worse for privacy than doing it locally.
- *
- * What is left for the Worker is the small set of things a browser genuinely
- * cannot do alone: serving the app, and proxying metadata providers that either
- * block cross-origin browser requests or require a shared identifying header.
+ * EasyAudio's Worker serves the app and proxies public metadata providers.
+ * Audio bytes never enter the Worker; all decoding, analysis, tag writing and
+ * ZIP assembly stay in the browser.
  */
 
-interface Env {
+const APP_PREFIX = '/easyaudio';
+const CANONICAL_ORIGIN = 'https://charliepolito.com';
+const MB_USER_AGENT =
+  'EasyAudio/1.0 (+https://github.com/cpolito17/EasyAudio; https://charliepolito.com/easyaudio/)';
+const MBID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const VISITOR_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+interface RuntimeEnv {
   ASSETS: Fetcher;
+  API_USER_LIMITER: RateLimit;
+  API_IP_LIMITER: RateLimit;
   ACOUSTID_API_KEY?: string;
 }
 
-/** MusicBrainz requires a descriptive, contactable User-Agent on every call. */
-const MB_USER_AGENT =
-  'EasyAudio/0.1 (https://github.com/cpolito17/EasyAudio)';
-
-const JSON_HEADERS = {
-  'content-type': 'application/json; charset=utf-8',
-  'cache-control': 'public, max-age=3600',
+const BASE_SECURITY_HEADERS: Record<string, string> = {
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'cross-origin-opener-policy': 'same-origin',
+  'cross-origin-resource-policy': 'same-origin',
 };
+
+const HTML_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' blob: data:",
+  "media-src 'self' blob:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  'upgrade-insecure-requests',
+].join('; ');
 
 function json(body: unknown, status = 200, extra: HeadersInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...JSON_HEADERS, ...extra },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': status >= 400 ? 'no-store' : 'public, max-age=3600',
+      ...BASE_SECURITY_HEADERS,
+      ...extra,
+    },
   });
 }
 
@@ -37,13 +58,47 @@ function badRequest(message: string): Response {
   return json({ error: message }, 400);
 }
 
-/**
- * Fetch upstream with a bounded timeout so a hanging provider cannot pin the
- * request open until the platform kills it.
- */
-async function upstream(url: string, headers: HeadersInit): Promise<Response> {
+function secureAsset(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(BASE_SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  const contentType = headers.get('content-type') ?? '';
+  if (contentType.includes('text/html')) {
+    headers.set('content-security-policy', HTML_CSP);
+    headers.set('cache-control', 'public, max-age=300');
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function canonicalRedirect(url: URL): Response {
+  const target = new URL(CANONICAL_ORIGIN);
+  const suffix = routedPath(url);
+  target.pathname = `${APP_PREFIX}${suffix}`.replace(/\/{2,}/g, '/');
+  target.search = url.search;
+  return Response.redirect(target.toString(), 308);
+}
+
+function routedPath(url: URL): string {
+  if (url.pathname === APP_PREFIX) return '/';
+  if (url.pathname.startsWith(`${APP_PREFIX}/`)) {
+    return url.pathname.slice(APP_PREFIX.length) || '/';
+  }
+  return url.pathname;
+}
+
+async function upstream(url: string, init: RequestInit = {}): Promise<Response> {
   const signal = AbortSignal.timeout(10_000);
-  return fetch(url, { headers, signal, cf: { cacheTtl: 3600 } });
+  const method = (init.method ?? 'GET').toUpperCase();
+  return fetch(url, {
+    ...init,
+    signal,
+    ...(method === 'GET' ? { cf: { cacheTtl: 3600, cacheEverything: true } } : {}),
+  });
 }
 
 async function searchReleases(query: string, limit: number): Promise<Response> {
@@ -52,72 +107,52 @@ async function searchReleases(query: string, limit: number): Promise<Response> {
     encodeURIComponent(String(limit)) +
     '&query=' +
     encodeURIComponent(query);
-
   const res = await upstream(url, {
-    'user-agent': MB_USER_AGENT,
-    accept: 'application/json',
+    headers: { 'user-agent': MB_USER_AGENT, accept: 'application/json' },
   });
-  if (!res.ok) {
-    return json({ error: `MusicBrainz returned ${res.status}` }, 502);
-  }
+  if (!res.ok) return json({ error: `MusicBrainz returned ${res.status}` }, 502);
   return json(await res.json());
 }
 
 async function lookupRelease(mbid: string): Promise<Response> {
-  // `recordings` gives us the track list; `isrcs` and `labels` fill the fields
-  // that separate a tidy library from a merely populated one.
   const inc = 'artist-credits+recordings+labels+isrcs+release-groups+media';
   const url =
     `https://musicbrainz.org/ws/2/release/${encodeURIComponent(mbid)}` +
     `?fmt=json&inc=${inc}`;
-
   const res = await upstream(url, {
-    'user-agent': MB_USER_AGENT,
-    accept: 'application/json',
+    headers: { 'user-agent': MB_USER_AGENT, accept: 'application/json' },
   });
-  if (!res.ok) {
-    return json({ error: `MusicBrainz returned ${res.status}` }, 502);
-  }
+  if (!res.ok) return json({ error: `MusicBrainz returned ${res.status}` }, 502);
   return json(await res.json());
 }
 
-/**
- * Cover Art Archive redirects to archive.org, which does not send permissive
- * CORS headers for every asset. Streaming the bytes through the Worker keeps
- * the browser's canvas untainted so we can still resize and re-encode the art.
- */
 async function coverArt(mbid: string, size: string): Promise<Response> {
   const suffix = size === 'full' ? '' : `-${size}`;
   const url = `https://coverartarchive.org/release/${encodeURIComponent(mbid)}/front${suffix}`;
-
-  const res = await upstream(url, { accept: 'image/*' });
+  const res = await upstream(url, { headers: { accept: 'image/*' } });
   if (!res.ok) {
     return json({ error: `No cover art (${res.status})` }, res.status === 404 ? 404 : 502);
   }
-
-  const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().startsWith('image/')) {
+    return json({ error: 'Cover Art Archive returned an unexpected file type.' }, 502);
+  }
   return new Response(res.body, {
     headers: {
       'content-type': contentType,
       'cache-control': 'public, max-age=86400',
+      ...BASE_SECURITY_HEADERS,
     },
   });
 }
 
-/**
- * Acoustic fingerprint lookup. Disabled unless an API key is configured, so a
- * fresh deploy degrades to manual and text-search tagging rather than erroring.
- */
 async function acoustid(
-  env: Env,
+  env: RuntimeEnv,
   fingerprint: string,
   duration: string,
 ): Promise<Response> {
   if (!env.ACOUSTID_API_KEY) {
-    return json(
-      { error: 'Fingerprint lookup is not configured on this deployment.' },
-      501,
-    );
+    return json({ error: 'Fingerprint lookup is not configured on this deployment.' }, 501);
   }
   const body = new URLSearchParams({
     client: env.ACOUSTID_API_KEY,
@@ -125,74 +160,116 @@ async function acoustid(
     duration,
     fingerprint,
   });
-  const res = await upstream('https://api.acoustid.org/v2/lookup?' + body, {
-    accept: 'application/json',
+  const res = await upstream('https://api.acoustid.org/v2/lookup', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body,
   });
-  if (!res.ok) {
-    return json({ error: `AcoustID returned ${res.status}` }, 502);
-  }
+  if (!res.ok) return json({ error: `AcoustID returned ${res.status}` }, 502);
   return json(await res.json());
 }
 
+async function allowApiRequest(request: Request, env: RuntimeEnv, path: string): Promise<boolean> {
+  if (request.headers.get('sec-fetch-site') === 'cross-site') return false;
+  const suppliedVisitor = request.headers.get('x-easyaudio-visitor') ?? '';
+  const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+  const visitor = VISITOR_RE.test(suppliedVisitor) ? suppliedVisitor : `ip:${ip}`;
+  const [user, network] = await Promise.all([
+    env.API_USER_LIMITER.limit({ key: `${path}:${visitor}` }),
+    env.API_IP_LIMITER.limit({ key: `${path}:${ip}` }),
+  ]);
+  return user.success && network.success;
+}
+
+async function handleApi(request: Request, env: RuntimeEnv, path: string, url: URL): Promise<Response> {
+  if (request.method !== 'GET') {
+    return json({ error: 'Method not allowed' }, 405, { allow: 'GET' });
+  }
+  if (!(await allowApiRequest(request, env, path))) {
+    return json({ error: 'Too many metadata requests. Please wait a minute.' }, 429, {
+      'retry-after': '60',
+    });
+  }
+
+  switch (path) {
+    case '/api/health':
+      return json({ ok: true, fingerprinting: Boolean(env.ACOUSTID_API_KEY) });
+
+    case '/api/musicbrainz/search': {
+      const query = (url.searchParams.get('q') ?? '').trim();
+      if (!query) return badRequest('Missing "q" parameter.');
+      if (query.length > 300) return badRequest('Search query is too long.');
+      const limit = Math.min(25, Math.max(1, Number(url.searchParams.get('limit') ?? 10) || 10));
+      return searchReleases(query, limit);
+    }
+
+    case '/api/musicbrainz/release': {
+      const mbid = url.searchParams.get('id') ?? '';
+      if (!MBID_RE.test(mbid)) return badRequest('Invalid release ID.');
+      return lookupRelease(mbid);
+    }
+
+    case '/api/coverart': {
+      const mbid = url.searchParams.get('id') ?? '';
+      if (!MBID_RE.test(mbid)) return badRequest('Invalid release ID.');
+      const size = url.searchParams.get('size') ?? '500';
+      if (!['250', '500', '1200', 'full'].includes(size)) {
+        return badRequest('size must be one of 250, 500, 1200, full.');
+      }
+      return coverArt(mbid, size);
+    }
+
+    case '/api/acoustid': {
+      const fingerprint = url.searchParams.get('fingerprint') ?? '';
+      const duration = url.searchParams.get('duration') ?? '';
+      if (!fingerprint || fingerprint.length > 12_000) {
+        return badRequest('Fingerprint is missing or too long.');
+      }
+      const seconds = Number(duration);
+      if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86_400) {
+        return badRequest('Duration must be between 0 and 86400 seconds.');
+      }
+      return acoustid(env, fingerprint, String(Math.round(seconds)));
+    }
+
+    default:
+      return json({ error: 'Not found' }, 404);
+  }
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: RuntimeEnv): Promise<Response> {
     const url = new URL(request.url);
 
-    if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request);
+    // Keep old workers.dev bookmarks useful without creating a duplicate SEO origin.
+    if (url.hostname.endsWith('.workers.dev')) return canonicalRedirect(url);
+    if (url.pathname === APP_PREFIX) {
+      const target = new URL(request.url);
+      target.pathname = `${APP_PREFIX}/`;
+      return Response.redirect(target.toString(), 308);
     }
 
-    if (request.method !== 'GET') {
-      return json({ error: 'Method not allowed' }, 405, { allow: 'GET' });
-    }
-
+    const path = routedPath(url);
     try {
-      switch (url.pathname) {
-        case '/api/health':
-          return json({ ok: true, fingerprinting: Boolean(env.ACOUSTID_API_KEY) });
-
-        case '/api/musicbrainz/search': {
-          const query = url.searchParams.get('q');
-          if (!query) return badRequest('Missing "q" parameter.');
-          const limit = Math.min(
-            25,
-            Math.max(1, Number(url.searchParams.get('limit') ?? 10) || 10),
-          );
-          return await searchReleases(query, limit);
-        }
-
-        case '/api/musicbrainz/release': {
-          const mbid = url.searchParams.get('id');
-          if (!mbid) return badRequest('Missing "id" parameter.');
-          return await lookupRelease(mbid);
-        }
-
-        case '/api/coverart': {
-          const mbid = url.searchParams.get('id');
-          if (!mbid) return badRequest('Missing "id" parameter.');
-          const size = url.searchParams.get('size') ?? '500';
-          if (!['250', '500', '1200', 'full'].includes(size)) {
-            return badRequest('size must be one of 250, 500, 1200, full.');
-          }
-          return await coverArt(mbid, size);
-        }
-
-        case '/api/acoustid': {
-          const fingerprint = url.searchParams.get('fingerprint');
-          const duration = url.searchParams.get('duration');
-          if (!fingerprint || !duration) {
-            return badRequest('Missing "fingerprint" or "duration".');
-          }
-          return await acoustid(env, fingerprint, duration);
-        }
-
-        default:
-          return json({ error: 'Not found' }, 404);
+      if (path.startsWith('/api/')) return await handleApi(request, env, path, url);
+      if (!['GET', 'HEAD'].includes(request.method)) {
+        return json({ error: 'Method not allowed' }, 405, { allow: 'GET, HEAD' });
       }
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = path;
+      return secureAsset(await env.ASSETS.fetch(new Request(assetUrl, request)));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unexpected upstream failure.';
-      return json({ error: message }, 502);
+      console.error(
+        JSON.stringify({
+          event: 'easyaudio_request_failed',
+          path,
+          error: error instanceof Error ? error.name : 'UnknownError',
+        }),
+      );
+      return json({ error: 'The metadata service is temporarily unavailable.' }, 502);
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<RuntimeEnv>;

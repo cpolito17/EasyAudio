@@ -19,6 +19,7 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.cache/easyaudio.tsbuildinfo",
     "types": [
       "vite/client"
     ]

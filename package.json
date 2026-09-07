@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b --noCheck && vite build",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && npm run worker:typecheck",
+    "worker:typecheck": "tsc -p worker/tsconfig.json",
     "preview": "vite preview --port 4173 --strictPort",
     "deploy": "npm run build && wrangler deploy",
     "cf-dev": "npm run build && wrangler dev",
@@ -23,7 +24,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260702.1",
+    "@cloudflare/workers-types": "^5.20260903.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
@@ -33,6 +34,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.129.0"
   }
 }

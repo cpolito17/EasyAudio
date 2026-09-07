@@ -196,6 +196,59 @@ body {
   overscroll-behavior: none;
 }
 
+.portfolio-return {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem 0.28rem 0.35rem;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    border-color 140ms var(--ease-standard),
+    color 140ms var(--ease-standard),
+    transform 140ms var(--ease-standard);
+}
+
+.portfolio-return img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.portfolio-return:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.portfolio-return:focus-visible {
+  outline: 3px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .portfolio-return {
+    padding-right: 0.35rem;
+  }
+
+  .portfolio-return span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 /*
  * A single very soft light source behind the app. It is fixed and
  * pointer-events-none so it never repaints while content scrolls.

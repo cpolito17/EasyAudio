@@ -103,8 +103,29 @@ function joinCredit(credit: MbArtistCredit[] | undefined): string {
     .trim();
 }
 
+const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/api`;
+const VISITOR_KEY = 'easyaudio-visitor';
+
+function visitorId(): string {
+  let id = localStorage.getItem(VISITOR_KEY);
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+    id = crypto.randomUUID();
+    localStorage.setItem(VISITOR_KEY, id);
+  }
+  return id;
+}
+
+function apiPath(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { accept: 'application/json' } });
+  const response = await fetch(apiPath(path), {
+    headers: {
+      accept: 'application/json',
+      'x-easyaudio-visitor': visitorId(),
+    },
+  });
   if (!response.ok) {
     let message = `Lookup failed (${response.status}).`;
     try {
@@ -139,7 +160,7 @@ export async function searchReleases(
   if (!query) return [];
 
   const data = await request<{ releases?: MbRelease[] }>(
-    `/api/musicbrainz/search?limit=12&q=${encodeURIComponent(query)}`,
+    `/musicbrainz/search?limit=12&q=${encodeURIComponent(query)}`,
   );
 
   return (data.releases ?? []).map((release) => {
@@ -168,7 +189,7 @@ export async function searchReleases(
 
 export async function fetchRelease(mbid: string): Promise<ReleaseDetail> {
   const release = await request<MbRelease>(
-    `/api/musicbrainz/release?id=${encodeURIComponent(mbid)}`,
+    `/musicbrainz/release?id=${encodeURIComponent(mbid)}`,
   );
 
   const albumArtist = joinCredit(release['artist-credit']);
@@ -216,12 +237,14 @@ export async function fetchRelease(mbid: string): Promise<ReleaseDetail> {
 
 /** URL for a release's front cover, served through the Worker proxy. */
 export function coverArtUrl(mbid: string, size: '250' | '500' | '1200' = '1200'): string {
-  return `/api/coverart?id=${encodeURIComponent(mbid)}&size=${size}`;
+  return apiPath(`/coverart?id=${encodeURIComponent(mbid)}&size=${size}`);
 }
 
 /** Fetch cover art bytes, or null when the release has none. */
 export async function fetchCoverArt(mbid: string): Promise<Blob | null> {
-  const response = await fetch(coverArtUrl(mbid));
+  const response = await fetch(coverArtUrl(mbid), {
+    headers: { 'x-easyaudio-visitor': visitorId() },
+  });
   if (!response.ok) return null;
   return response.blob();
 }

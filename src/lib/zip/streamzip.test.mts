@@ -4,7 +4,7 @@
  * Run with: npm run test
  */
 import { writeFileSync, mkdtempSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,11 +44,16 @@ writeFileSync(archivePath, archive);
 check('writer byte count matches output', zip.bytesWritten === archive.length);
 
 // External validation: `unzip -t` verifies every CRC.
-try {
-  const output = execFileSync('unzip', ['-t', archivePath], { encoding: 'utf8' });
-  check('unzip reports no errors', output.includes('No errors detected'));
-} catch (error) {
-  check('unzip reports no errors', false, String(error));
+const unzipProbe = spawnSync('unzip', ['-v'], { encoding: 'utf8' });
+if (unzipProbe.error && (unzipProbe.error as NodeJS.ErrnoException).code === 'ENOENT') {
+  console.log('SKIP  unzip is not installed (Python validation still runs)');
+} else {
+  try {
+    const output = execFileSync('unzip', ['-t', archivePath], { encoding: 'utf8' });
+    check('unzip reports no errors', output.includes('No errors detected'));
+  } catch (error) {
+    check('unzip reports no errors', false, String(error));
+  }
 }
 
 // Python's zipfile parses the central directory independently.
@@ -61,7 +66,8 @@ print(json.dumps({
   'names': z.namelist(),
   'bodies': [z.read(n).decode() for n in z.namelist()],
 }))`;
-  const output = execFileSync('python3', ['-c', script], { encoding: 'utf8' });
+  const python = process.platform === 'win32' ? 'python' : 'python3';
+  const output = execFileSync(python, ['-c', script], { encoding: 'utf8' });
   const parsed = JSON.parse(output);
   check('python zipfile finds no corrupt entry', parsed.bad === null);
   check(
